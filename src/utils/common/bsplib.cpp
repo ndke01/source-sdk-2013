@@ -541,6 +541,8 @@ const char *GetLumpName( unsigned int lumpnum )
 // out the HDR lumps for lightmaps, ambient leaves, and lights sources.
 bool g_bHDR = false;
 
+BSPConverterOptions g_BSPConverterOptions;
+
 // Set to true to generate Xbox360 native output files
 static bool g_bSwapOnLoad = false;
 static bool g_bSwapOnWrite = false;
@@ -652,8 +654,7 @@ dbrush_t	dbrushes[MAX_MAP_BRUSHES];
 int			numbrushsides;
 dbrushside_t	dbrushsides[MAX_MAP_BRUSHSIDES];
 
-int			numareas;
-darea_t		dareas[MAX_MAP_AREAS];
+CUtlVector<darea_t> dareas;
 
 int			numareaportals;
 dareaportal_t	dareaportals[MAX_MAP_AREAPORTALS];
@@ -678,9 +679,8 @@ int					g_nClipPortalVerts;
 dcubemapsample_t	g_CubemapSamples[MAX_MAP_CUBEMAPSAMPLES];
 int					g_nCubemapSamples = 0;
 
-int					g_nOverlayCount;
-doverlay_t			g_Overlays[MAX_MAP_OVERLAYS];
-doverlayfade_t		g_OverlayFades[MAX_MAP_OVERLAYS];
+CUtlVector<doverlay_t> g_Overlays;
+CUtlVector<doverlayfade_t> g_OverlayFades;
 
 int					g_nWaterOverlayCount;
 dwateroverlay_t		g_WaterOverlays[MAX_MAP_WATEROVERLAYS];
@@ -759,7 +759,7 @@ static unsigned int AlignFilePosition( FileHandle_t hFile, int alignment )
 }
 
 //-----------------------------------------------------------------------------
-// Purpose: // Get a pakfile instance
+// Purpose: Get a pakfile instance
 // Output : IZip*
 //-----------------------------------------------------------------------------
 IZip* GetPakFile( void )
@@ -769,6 +769,18 @@ IZip* GetPakFile( void )
 		s_pakFile = IZip::CreateZip();
 	}
 	return s_pakFile;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Set a pakfile instance
+//-----------------------------------------------------------------------------
+void SetPakFile( IZip* pak )
+{
+	// PiMoN: static my ass :angry:
+	if ( s_pakFile )
+		ReleasePakFileLumps();
+
+	s_pakFile = pak;
 }
 
 //-----------------------------------------------------------------------------
@@ -1210,6 +1222,122 @@ void CGameLump::SwapGameLump( GameLumpId_t id, int version, byte *dest, byte *sr
 	}
 }
 
+namespace BSP21GameLumps
+{
+	struct StaticPropLumpV7_t
+	{
+		Vector			m_Origin;
+		QAngle			m_Angles;
+		unsigned short	m_PropType;
+		unsigned short	m_FirstLeaf;
+		unsigned short	m_LeafCount;
+		unsigned char	m_Solid;
+		unsigned char	m_Flags;
+		int				m_Skin;
+		float			m_FadeMinDist;
+		float			m_FadeMaxDist;
+		Vector			m_LightingOrigin;
+		float			m_flForcedFadeScale;
+		unsigned short	m_nMinDXLevel;
+		unsigned short	m_nMaxDXLevel;
+		//	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
+		color32			m_DiffuseModulation;	// per instance color and alpha modulation
+	};
+
+	struct StaticPropLumpV8_t
+	{
+		Vector			m_Origin;
+		QAngle			m_Angles;
+		unsigned short	m_PropType;
+		unsigned short	m_FirstLeaf;
+		unsigned short	m_LeafCount;
+		unsigned char	m_Solid;
+		unsigned char	m_Flags;
+		int				m_Skin;
+		float			m_FadeMinDist;
+		float			m_FadeMaxDist;
+		Vector			m_LightingOrigin;
+		float			m_flForcedFadeScale;
+		unsigned char	m_nMinCPULevel;
+		unsigned char	m_nMaxCPULevel;
+		unsigned char	m_nMinGPULevel;
+		unsigned char	m_nMaxGPULevel;
+		//	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
+		color32			m_DiffuseModulation;	// per instance color and alpha modulation
+	};
+
+	struct StaticPropLumpV9_t
+	{
+		Vector			m_Origin;
+		QAngle			m_Angles;
+		unsigned short	m_PropType;
+		unsigned short	m_FirstLeaf;
+		unsigned short	m_LeafCount;
+		unsigned char	m_Solid;
+		unsigned char	m_Flags;
+		int				m_Skin;
+		float			m_FadeMinDist;
+		float			m_FadeMaxDist;
+		Vector			m_LightingOrigin;
+		float			m_flForcedFadeScale;
+		unsigned char	m_nMinCPULevel;
+		unsigned char	m_nMaxCPULevel;
+		unsigned char	m_nMinGPULevel;
+		unsigned char	m_nMaxGPULevel;
+		//	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
+		color32			m_DiffuseModulation;	// per instance color and alpha modulation
+		bool			m_bDisableX360;
+	};
+
+	struct StaticPropLumpV10_t
+	{
+		Vector			m_Origin;
+		QAngle			m_Angles;
+		unsigned short	m_PropType;
+		unsigned short	m_FirstLeaf;
+		unsigned short	m_LeafCount;
+		unsigned char	m_Solid;
+		unsigned char	m_Flags;
+		int				m_Skin;
+		float			m_FadeMinDist;
+		float			m_FadeMaxDist;
+		Vector			m_LightingOrigin;
+		float			m_flForcedFadeScale;
+		unsigned char	m_nMinCPULevel;
+		unsigned char	m_nMaxCPULevel;
+		unsigned char	m_nMinGPULevel;
+		unsigned char	m_nMaxGPULevel;
+		//	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
+		color32			m_DiffuseModulation;	// per instance color and alpha modulation
+		bool			m_bDisableX360;
+		int				m_FlagsEx;				// more flags (introduced in v10)
+	};
+	struct StaticPropLumpV11_t
+	{
+		Vector			m_Origin;
+		QAngle			m_Angles;
+		unsigned short	m_PropType;
+		unsigned short	m_FirstLeaf;
+		unsigned short	m_LeafCount;
+		unsigned char	m_Solid;
+		unsigned char	m_Flags;
+		int				m_Skin;
+		float			m_FadeMinDist;
+		float			m_FadeMaxDist;
+		Vector			m_LightingOrigin;
+		float			m_flForcedFadeScale;
+		unsigned char	m_nMinCPULevel;
+		unsigned char	m_nMaxCPULevel;
+		unsigned char	m_nMinGPULevel;
+		unsigned char	m_nMaxGPULevel;
+		//	int				m_Lighting;			// index into the GAMELUMP_STATIC_PROP_LIGHTING lump
+		color32			m_DiffuseModulation;	// per instance color and alpha modulation
+		bool			m_bDisableX360;
+		int				m_FlagsEx;				// more flags (introduced in v10)
+		float			m_flUniformScale;
+	};
+}
+
 //-----------------------------------------------------------------------------
 // Game lump file I/O
 //-----------------------------------------------------------------------------
@@ -1238,15 +1366,282 @@ void CGameLump::ParseGameLump( dheader_t* pHeader )
 				g_Swap.SwapFieldsToTargetEndian( &pGameLump[i] );
 			}
 
-			int length = pGameLump[i].filelen;
-			GameLumpHandle_t lump = g_GameLumps.CreateGameLump( pGameLump[i].id, length, pGameLump[i].flags, pGameLump[i].version );
-			if ( g_bSwapOnLoad )
+			if ( g_BSPConverterOptions.m_bEnabled )
 			{
-				SwapGameLump( pGameLump[i].id, pGameLump[i].version, (byte*)g_GameLumps.GetGameLump(lump), (byte *)pHeader + pGameLump[i].fileofs, length );
+				int length = pGameLump[i].filelen;
+				byte* data = (byte*)pHeader + pGameLump[i].fileofs;
+				CUtlBuffer bufFixed;
+				
+				if ( pGameLump[i].id == GAMELUMP_STATIC_PROPS )
+				{
+					if ( pGameLump[i].version < 7 )
+					{
+						// versions below 7 are standardized in all branches
+						Msg( "static prop lump version %d does not require fixing\n", pGameLump[i].version );
+					}
+					else
+					{
+						Msg( "fixing static prop lump version %d\n", pGameLump[i].version );
+						CUtlBuffer buf( data, length, CUtlBuffer::READ_ONLY );
+
+						int iDictCount = buf.GetInt();
+						Msg( "  dict count: %d\n", iDictCount );
+						CUtlVector<StaticPropDictLump_t> vecDict;
+						vecDict.EnsureCount( iDictCount );
+						buf.Get( vecDict.Base(), sizeof( StaticPropDictLump_t ) * iDictCount );
+
+						int iLeafCount = buf.GetInt();
+						Msg( "  leaf count: %d\n", iLeafCount );
+						CUtlVector<StaticPropLeafLump_t> vecLeaf;
+						vecLeaf.EnsureCount( iLeafCount );
+						buf.Get( vecLeaf.Base(), sizeof( StaticPropLeafLump_t ) * iLeafCount );
+
+						int iPropCount = buf.GetInt();
+						Msg( "  prop count: %d\n", iPropCount );
+						CUtlVector<StaticPropLump_t> vecFixedProps;
+						vecFixedProps.EnsureCount( iPropCount );
+
+						switch ( pGameLump[i].version )
+						{
+							case 7:
+							{
+								CUtlVector<BSP21GameLumps::StaticPropLumpV7_t> vecProps;
+								vecProps.EnsureCount( iPropCount );
+								buf.Get( vecProps.Base(), sizeof( BSP21GameLumps::StaticPropLumpV7_t ) * iPropCount );
+
+								for ( int j = 0; j < iPropCount; j++ )
+								{
+									vecFixedProps[j].m_Origin = vecProps[j].m_Origin;
+									vecFixedProps[j].m_Angles = vecProps[j].m_Angles;
+									vecFixedProps[j].m_PropType = vecProps[j].m_PropType;
+									vecFixedProps[j].m_FirstLeaf = vecProps[j].m_FirstLeaf;
+									vecFixedProps[j].m_LeafCount = vecProps[j].m_LeafCount;
+									vecFixedProps[j].m_Solid = vecProps[j].m_Solid;
+									vecFixedProps[j].m_Skin = vecProps[j].m_Skin;
+									vecFixedProps[j].m_FadeMinDist = vecProps[j].m_FadeMinDist;
+									vecFixedProps[j].m_FadeMaxDist = vecProps[j].m_FadeMaxDist;
+									vecFixedProps[j].m_LightingOrigin = vecProps[j].m_LightingOrigin;
+									vecFixedProps[j].m_flForcedFadeScale = vecProps[j].m_flForcedFadeScale;
+									vecFixedProps[j].m_nMinDXLevel = vecProps[j].m_nMinDXLevel;
+									vecFixedProps[j].m_nMaxDXLevel = vecProps[j].m_nMaxDXLevel;
+									vecFixedProps[j].m_Flags = vecProps[j].m_Flags | STATIC_PROP_NO_PER_TEXEL_LIGHTING;
+									vecFixedProps[j].m_Flags &= ~STATIC_PROP_SCREEN_SPACE_FADE; // 0x20 is STATIC_PROP_MARKED_FOR_FAST_REFLECTION, unused
+									vecFixedProps[j].m_nLightmapResolutionX = 0;
+									vecFixedProps[j].m_nLightmapResolutionY = 0;
+
+									// spew props that will look differently
+									if ( vecProps[j].m_DiffuseModulation.r != 255 || vecProps[j].m_DiffuseModulation.g != 255 || vecProps[j].m_DiffuseModulation.b != 255 )
+									{
+										Warning( "static prop at %.2f %.2f %.2f has non-default render color (%d %d %d)!\n",
+												 vecProps[j].m_Origin.x, vecProps[j].m_Origin.y, vecProps[j].m_Origin.z,
+												 vecProps[j].m_DiffuseModulation.r, vecProps[j].m_DiffuseModulation.g, vecProps[j].m_DiffuseModulation.b );
+									}
+								}
+
+								break;
+							}
+							case 8:
+							{
+								CUtlVector<BSP21GameLumps::StaticPropLumpV8_t> vecProps;
+								vecProps.EnsureCount( iPropCount );
+								buf.Get( vecProps.Base(), sizeof( BSP21GameLumps::StaticPropLumpV8_t ) * iPropCount );
+
+								for ( int j = 0; j < iPropCount; j++ )
+								{
+									vecFixedProps[j].m_Origin = vecProps[j].m_Origin;
+									vecFixedProps[j].m_Angles = vecProps[j].m_Angles;
+									vecFixedProps[j].m_PropType = vecProps[j].m_PropType;
+									vecFixedProps[j].m_FirstLeaf = vecProps[j].m_FirstLeaf;
+									vecFixedProps[j].m_LeafCount = vecProps[j].m_LeafCount;
+									vecFixedProps[j].m_Solid = vecProps[j].m_Solid;
+									vecFixedProps[j].m_Skin = vecProps[j].m_Skin;
+									vecFixedProps[j].m_FadeMinDist = vecProps[j].m_FadeMinDist;
+									vecFixedProps[j].m_FadeMaxDist = vecProps[j].m_FadeMaxDist;
+									vecFixedProps[j].m_LightingOrigin = vecProps[j].m_LightingOrigin;
+									vecFixedProps[j].m_flForcedFadeScale = vecProps[j].m_flForcedFadeScale;
+									vecFixedProps[j].m_nMinDXLevel = 0;
+									vecFixedProps[j].m_nMaxDXLevel = 0;
+									vecFixedProps[j].m_Flags = vecProps[j].m_Flags | STATIC_PROP_NO_PER_TEXEL_LIGHTING;
+									vecFixedProps[j].m_Flags &= ~STATIC_PROP_SCREEN_SPACE_FADE; // 0x20 is STATIC_PROP_MARKED_FOR_FAST_REFLECTION, unused
+									vecFixedProps[j].m_nLightmapResolutionX = 0;
+									vecFixedProps[j].m_nLightmapResolutionY = 0;
+
+									// spew props that will look differently
+									if ( vecProps[j].m_DiffuseModulation.r != 255 || vecProps[j].m_DiffuseModulation.g != 255 || vecProps[j].m_DiffuseModulation.b != 255 )
+									{
+										Warning( "static prop at %.2f %.2f %.2f has non-default render color (%d %d %d)!\n",
+												 vecProps[j].m_Origin.x, vecProps[j].m_Origin.y, vecProps[j].m_Origin.z,
+												 vecProps[j].m_DiffuseModulation.r, vecProps[j].m_DiffuseModulation.g, vecProps[j].m_DiffuseModulation.b );
+									}
+								}
+
+								break;
+							}
+							case 9:
+							{
+								CUtlVector<BSP21GameLumps::StaticPropLumpV9_t> vecProps;
+								vecProps.EnsureCount( iPropCount );
+								buf.Get( vecProps.Base(), sizeof( BSP21GameLumps::StaticPropLumpV9_t ) * iPropCount );
+
+								for ( int j = 0; j < iPropCount; j++ )
+								{
+									vecFixedProps[j].m_Origin = vecProps[j].m_Origin;
+									vecFixedProps[j].m_Angles = vecProps[j].m_Angles;
+									vecFixedProps[j].m_PropType = vecProps[j].m_PropType;
+									vecFixedProps[j].m_FirstLeaf = vecProps[j].m_FirstLeaf;
+									vecFixedProps[j].m_LeafCount = vecProps[j].m_LeafCount;
+									vecFixedProps[j].m_Solid = vecProps[j].m_Solid;
+									vecFixedProps[j].m_Skin = vecProps[j].m_Skin;
+									vecFixedProps[j].m_FadeMinDist = vecProps[j].m_FadeMinDist;
+									vecFixedProps[j].m_FadeMaxDist = vecProps[j].m_FadeMaxDist;
+									vecFixedProps[j].m_LightingOrigin = vecProps[j].m_LightingOrigin;
+									vecFixedProps[j].m_flForcedFadeScale = vecProps[j].m_flForcedFadeScale;
+									vecFixedProps[j].m_nMinDXLevel = 0;
+									vecFixedProps[j].m_nMaxDXLevel = 0;
+									vecFixedProps[j].m_Flags = vecProps[j].m_Flags | STATIC_PROP_NO_PER_TEXEL_LIGHTING;
+									vecFixedProps[j].m_Flags &= ~STATIC_PROP_SCREEN_SPACE_FADE; // 0x20 is STATIC_PROP_MARKED_FOR_FAST_REFLECTION, unused
+									vecFixedProps[j].m_nLightmapResolutionX = 0;
+									vecFixedProps[j].m_nLightmapResolutionY = 0;
+
+									// spew props that will look differently
+									if ( vecProps[j].m_DiffuseModulation.r != 255 || vecProps[j].m_DiffuseModulation.g != 255 || vecProps[j].m_DiffuseModulation.b != 255 )
+									{
+										Warning( "static prop at %.2f %.2f %.2f has non-default render color (%d %d %d)!\n",
+												 vecProps[j].m_Origin.x, vecProps[j].m_Origin.y, vecProps[j].m_Origin.z,
+												 vecProps[j].m_DiffuseModulation.r, vecProps[j].m_DiffuseModulation.g, vecProps[j].m_DiffuseModulation.b );
+									}
+								}
+
+								break;
+							}
+							case 10:
+							{
+								CUtlVector<BSP21GameLumps::StaticPropLumpV10_t> vecProps;
+								vecProps.EnsureCount( iPropCount );
+								buf.Get( vecProps.Base(), sizeof( BSP21GameLumps::StaticPropLumpV10_t ) * iPropCount );
+
+								for ( int j = 0; j < iPropCount; j++ )
+								{
+									vecFixedProps[j].m_Origin = vecProps[j].m_Origin;
+									vecFixedProps[j].m_Angles = vecProps[j].m_Angles;
+									vecFixedProps[j].m_PropType = vecProps[j].m_PropType;
+									vecFixedProps[j].m_FirstLeaf = vecProps[j].m_FirstLeaf;
+									vecFixedProps[j].m_LeafCount = vecProps[j].m_LeafCount;
+									vecFixedProps[j].m_Solid = vecProps[j].m_Solid;
+									vecFixedProps[j].m_Skin = vecProps[j].m_Skin;
+									vecFixedProps[j].m_FadeMinDist = vecProps[j].m_FadeMinDist;
+									vecFixedProps[j].m_FadeMaxDist = vecProps[j].m_FadeMaxDist;
+									vecFixedProps[j].m_LightingOrigin = vecProps[j].m_LightingOrigin;
+									vecFixedProps[j].m_flForcedFadeScale = vecProps[j].m_flForcedFadeScale;
+									vecFixedProps[j].m_nMinDXLevel = 0;
+									vecFixedProps[j].m_nMaxDXLevel = 0;
+									vecFixedProps[j].m_Flags = vecProps[j].m_Flags | STATIC_PROP_NO_PER_TEXEL_LIGHTING;
+									vecFixedProps[j].m_Flags &= ~STATIC_PROP_SCREEN_SPACE_FADE; // 0x20 is STATIC_PROP_MARKED_FOR_FAST_REFLECTION, unused
+									vecFixedProps[j].m_Flags &= ~STATIC_PROP_NO_PER_VERTEX_LIGHTING; // this flag is re-purposed by vrad as "no occlusion"
+									vecFixedProps[j].m_nLightmapResolutionX = 0;
+									vecFixedProps[j].m_nLightmapResolutionY = 0;
+
+									// spew props that will look differently
+									if ( vecProps[j].m_DiffuseModulation.r != 255 || vecProps[j].m_DiffuseModulation.g != 255 || vecProps[j].m_DiffuseModulation.b != 255 )
+									{
+										Warning( "static prop at %.2f %.2f %.2f has non-default render color (%d %d %d)!\n",
+												 vecProps[j].m_Origin.x, vecProps[j].m_Origin.y, vecProps[j].m_Origin.z,
+												 vecProps[j].m_DiffuseModulation.r, vecProps[j].m_DiffuseModulation.g, vecProps[j].m_DiffuseModulation.b );
+									}
+								}
+
+								break;
+							}
+							case 11:
+							{
+								CUtlVector<BSP21GameLumps::StaticPropLumpV11_t> vecProps;
+								vecProps.EnsureCount( iPropCount );
+								buf.Get( vecProps.Base(), sizeof( BSP21GameLumps::StaticPropLumpV11_t ) * iPropCount );
+
+								for ( int j = 0; j < iPropCount; j++ )
+								{
+									vecFixedProps[j].m_Origin = vecProps[j].m_Origin;
+									vecFixedProps[j].m_Angles = vecProps[j].m_Angles;
+									vecFixedProps[j].m_PropType = vecProps[j].m_PropType;
+									vecFixedProps[j].m_FirstLeaf = vecProps[j].m_FirstLeaf;
+									vecFixedProps[j].m_LeafCount = vecProps[j].m_LeafCount;
+									vecFixedProps[j].m_Solid = vecProps[j].m_Solid;
+									vecFixedProps[j].m_Skin = vecProps[j].m_Skin;
+									vecFixedProps[j].m_FadeMinDist = vecProps[j].m_FadeMinDist;
+									vecFixedProps[j].m_FadeMaxDist = vecProps[j].m_FadeMaxDist;
+									vecFixedProps[j].m_LightingOrigin = vecProps[j].m_LightingOrigin;
+									vecFixedProps[j].m_flForcedFadeScale = vecProps[j].m_flForcedFadeScale;
+									vecFixedProps[j].m_nMinDXLevel = 0;
+									vecFixedProps[j].m_nMaxDXLevel = 0;
+									vecFixedProps[j].m_Flags = vecProps[j].m_Flags | STATIC_PROP_NO_PER_TEXEL_LIGHTING;
+									vecFixedProps[j].m_Flags &= ~STATIC_PROP_SCREEN_SPACE_FADE; // 0x20 is STATIC_PROP_MARKED_FOR_FAST_REFLECTION, unused
+									vecFixedProps[j].m_Flags &= ~STATIC_PROP_NO_PER_VERTEX_LIGHTING; // this flag is re-purposed by vrad as "no occlusion"
+									vecFixedProps[j].m_nLightmapResolutionX = 0;
+									vecFixedProps[j].m_nLightmapResolutionY = 0;
+
+									// spew props that will look differently
+									if ( vecProps[j].m_DiffuseModulation.r != 255 || vecProps[j].m_DiffuseModulation.g != 255 || vecProps[j].m_DiffuseModulation.b != 255 )
+									{
+										Warning( "static prop at %.2f %.2f %.2f has non-default render color (%d %d %d)!\n",
+												 vecProps[j].m_Origin.x, vecProps[j].m_Origin.y, vecProps[j].m_Origin.z,
+												 vecProps[j].m_DiffuseModulation.r, vecProps[j].m_DiffuseModulation.g, vecProps[j].m_DiffuseModulation.b );
+									}
+									if ( vecProps[j].m_flUniformScale != 1.0f )
+									{
+										Warning( "static prop at %.2f %.2f %.2f has non-default scale (%.2f)!\n",
+												 vecProps[j].m_Origin.x, vecProps[j].m_Origin.y, vecProps[j].m_Origin.z,
+												 vecProps[j].m_flUniformScale );
+									}
+								}
+
+								break;
+							}
+							default:
+							{
+								Error( "unknown static prop lump version %d", pGameLump[i].version );
+								break;
+							}
+						}
+
+						Msg( "  old lump size: %d\n", length );
+						length = sizeof( StaticPropDictLump_t ) * iDictCount + sizeof( StaticPropLeafLump_t ) * iLeafCount + sizeof( StaticPropLump_t ) * iPropCount + 3 * sizeof( int );
+						Msg( "  new lump size: %d\n", length );
+
+						bufFixed.EnsureCapacity( length );
+						bufFixed.PutInt( iDictCount );
+						bufFixed.Put( vecDict.Base(), sizeof( StaticPropDictLump_t ) * iDictCount );
+						bufFixed.PutInt( iLeafCount );
+						bufFixed.Put( vecLeaf.Base(), sizeof( StaticPropLeafLump_t ) * iLeafCount );
+						bufFixed.PutInt( iPropCount );
+						bufFixed.Put( vecFixedProps.Base(), sizeof( StaticPropLump_t ) * iPropCount );
+						data = (byte*)bufFixed.Base();
+
+						pGameLump[i].version = GAMELUMP_STATIC_PROPS_VERSION;
+					}
+				}
+
+				GameLumpHandle_t lump = g_GameLumps.CreateGameLump( pGameLump[i].id, length, pGameLump[i].flags, pGameLump[i].version );
+				if ( g_bSwapOnLoad )
+				{
+					SwapGameLump( pGameLump[i].id, pGameLump[i].version, (byte*)g_GameLumps.GetGameLump( lump ), data, length );
+				}
+				else
+				{
+					memcpy( g_GameLumps.GetGameLump( lump ), data, length );
+				}
 			}
 			else
 			{
-				memcpy( g_GameLumps.GetGameLump(lump), (byte *)pHeader + pGameLump[i].fileofs, length );
+				int length = pGameLump[i].filelen;
+				GameLumpHandle_t lump = g_GameLumps.CreateGameLump( pGameLump[i].id, length, pGameLump[i].flags, pGameLump[i].version );
+				if ( g_bSwapOnLoad )
+				{
+					SwapGameLump( pGameLump[i].id, pGameLump[i].version, (byte*)g_GameLumps.GetGameLump( lump ), (byte*)pHeader + pGameLump[i].fileofs, length );
+				}
+				else
+				{
+					memcpy( g_GameLumps.GetGameLump( lump ), (byte*)pHeader + pGameLump[i].fileofs, length );
+				}
 			}
 		}
 	}
@@ -1998,6 +2393,22 @@ void Lumps_Parse( void )
 	{
 		if ( !g_Lumps.bLumpParsed[i] && g_pBSPHeader->lumps[i].filelen )
 		{
+			if ( g_BSPConverterOptions.m_bEnabled )
+			{
+				if ( i == LUMP_UNUSED0 || // LUMP_FACEBRUSHES/LUMP_PROPCOLLISION: Portal 2/L4D2
+					 i == LUMP_UNUSED1 || // LUMP_FACEBRUSHLIST/LUMP_PROPHULLS: Portal 2/L4D2
+					 i == LUMP_UNUSED2 || // LUMP_PROPHULLVERTS: L4D2
+					 i == LUMP_UNUSED3 || // LUMP_PROPTRIS: L4D2
+					 i == LUMP_PHYSCOLLIDESURFACE || // LUMP_PROP_BLOB: L4D2 and above
+					 i == 61 || // LUMP_OVERLAY_SYSTEM_LEVELS: L4D and above
+					 i == 62 || // LUMP_PHYSLEVEL: L4D2 and above
+					 i == 63 ) // LUMP_DISP_MULTIBLEND: ASW and above
+				{
+					Msg( "unused lump detected (%d), skipping\n", i );
+					continue;
+				}
+			}
+
 			g_Lumps.size[i] = CopyVariableLump<byte>( FIELD_CHARACTER, i, &g_Lumps.pLumps[i], -1 );
 			Msg( "Reading unknown lump #%d (%d bytes)\n", i, g_Lumps.size[i] );
 		}
@@ -2163,15 +2574,129 @@ void LoadLeafAmbientLighting( int numLeafs )
 	}
 }
 
+namespace BSP21Lumps
+{
+	struct dworldlight_t
+	{
+		DECLARE_BYTESWAP_DATADESC();
+		Vector		origin;
+		Vector		intensity;
+		Vector		normal;			// for surfaces and spotlights
+		Vector		shadow_cast_offset;	// gets added to the light origin when this light is used as a shadow caster (only if DWL_FLAGS_CASTENTITYSHADOWS flag is set)
+		int			cluster;
+		emittype_t	type;
+		int			style;
+		float		stopdot;		// start of penumbra for emit_spotlight
+		float		stopdot2;		// end of penumbra for emit_spotlight
+		float		exponent;		// 
+		float		radius;			// cutoff distance
+		// falloff for emit_spotlight + emit_point: 
+		// 1 / (constant_attn + linear_attn * dist + quadratic_attn * dist^2)
+		float		constant_attn;
+		float		linear_attn;
+		float		quadratic_attn;
+		int			flags;			// Uses a combination of the DWL_FLAGS_ defines.
+		int			texinfo;		// 
+		int			owner;			// entity that this light it relative to
+	};
+
+	BEGIN_BYTESWAP_DATADESC( dworldlight_t )
+		DEFINE_FIELD( origin, FIELD_VECTOR ),
+		DEFINE_FIELD( intensity, FIELD_VECTOR ),
+		DEFINE_FIELD( normal, FIELD_VECTOR ),
+		DEFINE_FIELD( shadow_cast_offset, FIELD_VECTOR ),
+		DEFINE_FIELD( cluster, FIELD_INTEGER ),
+		DEFINE_FIELD( type, FIELD_INTEGER ),	// enumeration
+		DEFINE_FIELD( style, FIELD_INTEGER ),
+		DEFINE_FIELD( stopdot, FIELD_FLOAT ),
+		DEFINE_FIELD( stopdot2, FIELD_FLOAT ),
+		DEFINE_FIELD( exponent, FIELD_FLOAT ),
+		DEFINE_FIELD( radius, FIELD_FLOAT ),
+		DEFINE_FIELD( constant_attn, FIELD_FLOAT ),
+		DEFINE_FIELD( linear_attn, FIELD_FLOAT ),
+		DEFINE_FIELD( quadratic_attn, FIELD_FLOAT ),
+		DEFINE_FIELD( flags, FIELD_INTEGER ),
+		DEFINE_FIELD( texinfo, FIELD_INTEGER ),
+		DEFINE_FIELD( owner, FIELD_INTEGER ),
+	END_BYTESWAP_DATADESC()
+}
+
+int LoadWorldLightsLump( int lump, dworldlight_t* data )
+{
+	if ( g_pBSPHeader->lumps[lump].filelen < 1 )
+		return 0;
+
+	switch ( g_pBSPHeader->lumps[lump].version )
+	{
+		case 0:
+		{
+			Msg( "world lights lump version %d does not require fixing\n", g_pBSPHeader->lumps[lump].version );
+			return CopyLump( lump, data );
+		}
+		case 1:
+		{
+			Msg( "fixing world lights lump version %d\n", g_pBSPHeader->lumps[lump].version );
+
+			CUtlBuffer buf;
+			buf.EnsureCapacity( g_pBSPHeader->lumps[lump].filelen );
+			BSP21Lumps::dworldlight_t* dataWrong = (BSP21Lumps::dworldlight_t*)buf.Base();
+			int count = CopyLump( lump, dataWrong );
+			Msg( "  light count: %d\n", count );
+			Msg( "  old lump size: %d\n", g_pBSPHeader->lumps[lump].filelen );
+
+			for ( int i = 0; i < count; i++ )
+			{
+				data[i].origin = dataWrong[i].origin;
+				data[i].intensity = dataWrong[i].intensity;
+				data[i].normal = dataWrong[i].normal;
+				data[i].cluster = dataWrong[i].cluster;
+				data[i].type = dataWrong[i].type;
+				data[i].style = dataWrong[i].style;
+				data[i].stopdot = dataWrong[i].stopdot;
+				data[i].stopdot2 = dataWrong[i].stopdot2;
+				data[i].exponent = dataWrong[i].exponent;
+				data[i].radius = dataWrong[i].radius;
+				data[i].constant_attn = dataWrong[i].constant_attn;
+				data[i].linear_attn = dataWrong[i].linear_attn;
+				data[i].quadratic_attn = dataWrong[i].quadratic_attn;
+				data[i].flags = dataWrong[i].flags & DWL_FLAGS_INAMBIENTCUBE; // this is the only valid flag for us
+				data[i].texinfo = dataWrong[i].texinfo;
+				data[i].owner = dataWrong[i].owner;
+			}
+
+			Msg( "  new lump size: %d\n", sizeof( dworldlight_t ) * count );
+
+			return count;
+		}
+		default:
+		{
+			Error( "Unknown world lights lump version" );
+			break;
+		}
+	}
+}
+
 void ValidateHeader( const char *filename, const dheader_t *pHeader )
 {
 	if ( pHeader->ident != IDBSPHEADER )
 	{
 		Error ("%s is not a IBSP file", filename);
 	}
-	if ( pHeader->version < MINBSPVERSION || pHeader->version > BSPVERSION )
+	if ( g_BSPConverterOptions.m_bEnabled )
 	{
-		Error ("%s is version %i, not %i", filename, pHeader->version, BSPVERSION);
+		if ( pHeader->version == 21 )
+			Msg( "Valve BSP detected (version 21)\n" );
+		else if ( pHeader->version == 22 )
+			Msg( "Tactical Intervention BSP detected (version 22)\n" );
+		else
+			Error( "%s is version %i, not 21 or 22", filename, pHeader->version );
+	}
+	else
+	{
+		if ( pHeader->version < MINBSPVERSION || pHeader->version > BSPVERSION )
+		{
+			Error( "%s is version %i, not %i", filename, pHeader->version, BSPVERSION );
+		}
 	}
 }
 
@@ -2213,6 +2738,27 @@ void LoadBSPFile( const char *filename )
 {
 	OpenBSPFile( filename );
 
+	if ( g_BSPConverterOptions.m_bEnabled )
+	{
+		// very specific hack: l4d2 changes lump order from [offset length version] to [version offset length]
+		// so let's check a lump we definitely know the biggest version of, to find out if it's swapped or not
+		bool bShuffledLumps = g_pBSPHeader->lumps[LUMP_LEAFS].version > LUMP_LEAFS_VERSION;
+
+		for ( int i = 0; i < HEADER_LUMPS; i++ )
+		{
+			if ( bShuffledLumps )
+			{
+				V_swap( g_pBSPHeader->lumps[i].fileofs, g_pBSPHeader->lumps[i].version );
+				V_swap( g_pBSPHeader->lumps[i].filelen, g_pBSPHeader->lumps[i].fileofs );
+			}
+
+			// branches other than source 2013 have another unused field in here instead, so populate it manually
+			byte* pLumpData = (byte*)g_pBSPHeader + g_pBSPHeader->lumps[i].fileofs;
+			int uncompressedSize = LZMA_IsCompressed( pLumpData ) ? LZMA_GetActualSize( pLumpData ) : 0;
+			g_pBSPHeader->lumps[i].uncompressedSize = uncompressedSize;
+		}
+	}
+
 	nummodels = CopyLump( LUMP_MODELS, dmodels );
 	numvertexes = CopyLump( LUMP_VERTEXES, dvertexes );
 	numplanes = CopyLump( LUMP_PLANES, dplanes );
@@ -2245,7 +2791,12 @@ void LoadBSPFile( const char *filename )
 	numedges = CopyLump( LUMP_EDGES, dedges );
 	numbrushes = CopyLump( LUMP_BRUSHES, dbrushes );
 	numbrushsides = CopyLump( LUMP_BRUSHSIDES, dbrushsides );
-	numareas = CopyLump( LUMP_AREAS, dareas );
+	if ( g_BSPConverterOptions.m_bEnabled )
+	{
+		for ( int i = 0; i < numbrushsides; i++ )
+			dbrushsides[i].bevel = (byte)dbrushsides[i].bevel; // L4D2/ASW and above divide dbrushside_t::bevel into bevel and thin, each one byte
+	}
+	CopyLump( LUMP_AREAS, dareas );
 	numareaportals = CopyLump( LUMP_AREAPORTALS, dareaportals );
 
 	visdatasize = CopyLump ( FIELD_CHARACTER, LUMP_VISIBILITY, dvisdata );
@@ -2254,9 +2805,33 @@ void LoadBSPFile( const char *filename )
 
 	LoadLeafAmbientLighting( numleafs );
 
-	CopyLump( FIELD_CHARACTER, LUMP_ENTITIES, dentdata );
-	numworldlightsLDR = CopyLump( LUMP_WORLDLIGHTS, dworldlightsLDR );
-	numworldlightsHDR = CopyLump( LUMP_WORLDLIGHTS_HDR, dworldlightsHDR );
+	if ( g_BSPConverterOptions.m_bEnabled && g_pBSPHeader->version == 22 ) // Tactical Intervention
+	{
+		// TI uses a separate lump for client-side only entities, so merge them together (they both contain the same data, aka a bunch of KV blocks)
+		dentdata.SetCount( g_pBSPHeader->lumps[LUMP_ENTITIES].filelen + g_pBSPHeader->lumps[24].filelen - 1 ); // -1 to skip one of null terminators that both lumps have
+
+		// copy first lump
+		V_memcpy( dentdata.Base(), (byte*)g_pBSPHeader + g_pBSPHeader->lumps[LUMP_ENTITIES].fileofs, g_pBSPHeader->lumps[LUMP_ENTITIES].filelen );
+
+		// copy second lump right after the first one
+		// note the -1 in first argument: it skips the null terminator at the end of the first lump
+		V_memcpy( dentdata.Base() + g_pBSPHeader->lumps[LUMP_ENTITIES].filelen - 1, (byte*)g_pBSPHeader + g_pBSPHeader->lumps[24].fileofs, g_pBSPHeader->lumps[24].filelen );
+	}
+	else
+	{
+		CopyLump( FIELD_CHARACTER, LUMP_ENTITIES, dentdata );
+	}
+
+	if ( g_BSPConverterOptions.m_bEnabled )
+	{
+		numworldlightsLDR = LoadWorldLightsLump( LUMP_WORLDLIGHTS, dworldlightsLDR );
+		numworldlightsHDR = LoadWorldLightsLump( LUMP_WORLDLIGHTS_HDR, dworldlightsHDR );
+	}
+	else
+	{
+		numworldlightsLDR = CopyLump( LUMP_WORLDLIGHTS, dworldlightsLDR );
+		numworldlightsHDR = CopyLump( LUMP_WORLDLIGHTS_HDR, dworldlightsHDR );
+	}
 	
 	numleafwaterdata = CopyLump( LUMP_LEAFWATERDATA, dleafwaterdata );
 	g_PhysCollideSize = CopyVariableLump<byte>( FIELD_CHARACTER, LUMP_PHYSCOLLIDE, (void**)&g_pPhysCollide );
@@ -2276,7 +2851,7 @@ void LoadBSPFile( const char *filename )
 	if ( g_TexDataStringData.Count() > 0 && g_TexDataStringData.Tail() != 0 )
 		Error( "Cannot load corrupted bsp file %s", filename );
 
-	g_nOverlayCount = CopyLump( LUMP_OVERLAYS, g_Overlays );
+	CopyLump( LUMP_OVERLAYS, g_Overlays );
 	g_nWaterOverlayCount = CopyLump( LUMP_WATEROVERLAYS, g_WaterOverlays );
 	CopyLump( LUMP_OVERLAY_FADES, g_OverlayFades );
 	
@@ -2287,22 +2862,111 @@ void LoadBSPFile( const char *filename )
 	else
 		memset( &flags_lump, 0, sizeof( flags_lump ) );			// default flags to 0
 
-	g_LevelFlags = flags_lump.m_LevelFlags;
+	if ( g_BSPConverterOptions.m_bEnabled )
+		g_LevelFlags = flags_lump.m_LevelFlags & (LVLFLAGS_BAKED_STATIC_PROP_LIGHTING_NONHDR | LVLFLAGS_BAKED_STATIC_PROP_LIGHTING_HDR); // these are the only valid flags for us
+	else
+		g_LevelFlags = flags_lump.m_LevelFlags;
 
 	LoadOcclusionLump();
 
 	CopyLump( FIELD_SHORT, LUMP_LEAFMINDISTTOWATER, g_LeafMinDistToWater );
 
-	/*
-	int junk;
-	for( junk = 0; junk < g_nBSPStringTable; junk++ )
+	if ( g_BSPConverterOptions.m_bEnabled )
 	{
-		Msg( "stringtable %d", ( int )junk );
-		Msg( " %d:",  ( int )g_BSPStringTable[junk] );
-		puts( &g_BSPStringData[g_BSPStringTable[junk]] );
-		puts( "\n" );
+		if ( g_BSPConverterOptions.m_bSaveLightData )
+		{
+			if ( dlightdataLDR.IsEmpty() && dlightdataHDR.IsEmpty() )
+				Warning( "map has no lighting\n" );
+			else if ( dlightdataLDR.IsEmpty() )
+				Warning( "map has HDR lighting only\n" );
+			else if ( dlightdataHDR.IsEmpty() )
+				Warning( "map has LDR lighting only\n" );
+			else
+				qprintf( "map has HDR and LDR lighting\n" );
+
+			if ( flags_lump.m_LevelFlags & 0x00000004 ) // lightmap alpha
+			{
+				if ( g_BSPConverterOptions.m_bSaveLightmapAlpha )
+				{
+					Warning( "lightmap alpha is present; this is not a problem, but the map size will be bloated with useless data!\n" );
+				}
+				else
+				{
+					int iOldLightDataSize = dlightdataLDR.Count() + dlightdataHDR.Count();
+
+					// PiMoN: wow! C++ 11 features in Source! technologies of the future!
+					auto FixupAlphaData = []( CUtlVector<byte>& vecLightData, const int& iNumFaces, dface_t* pFaces )
+					{
+						if ( vecLightData.IsEmpty() )
+							return;
+
+						CUtlVector<byte> vecNewLightData;
+						vecNewLightData.EnsureCapacity( vecLightData.Count() ); // same data without alpha will definitely take less than that!
+						for ( int i = 0; i < iNumFaces; i++ )
+						{
+							dface_t& face = pFaces[i];
+
+							if ( texinfo[face.texinfo].flags & (SURF_SKY | SURF_NOLIGHT) )
+								continue; // non-lit texture
+
+							int iNumLightstyles = 0;
+							for ( iNumLightstyles = 0; iNumLightstyles < MAXLIGHTMAPS; iNumLightstyles++ )
+							{
+								if ( face.styles[iNumLightstyles] == 255 )
+									break;
+							}
+
+							if ( !iNumLightstyles )
+								continue;
+
+							int iAvgLightSize = iNumLightstyles * 4; // face light offset points *past* this, keep that in mind!
+							int iLightDataSize = iAvgLightSize;
+
+							int iNumLuxels = (face.m_LightmapTextureSizeInLuxels[0] + 1) * (face.m_LightmapTextureSizeInLuxels[1] + 1);
+							if ( texinfo[face.texinfo].flags & SURF_BUMPLIGHT )
+								iLightDataSize += iNumLuxels * 4 * iNumLightstyles * (NUM_BUMP_VECTS + 1);
+							else
+								iLightDataSize += iNumLuxels * 4 * iNumLightstyles;
+
+							// lightmap alpha lives somewhere here, I believe
+
+							vecNewLightData.AddMultipleToTail( iLightDataSize, &vecLightData[face.lightofs - iAvgLightSize] );
+							face.lightofs = vecNewLightData.Count() - iLightDataSize + iAvgLightSize; // point before the light data but after average light data
+						}
+
+						vecLightData = vecNewLightData; // swap the data
+					};
+
+					FixupAlphaData( dlightdataLDR, numfaces, dfaces ); // ldr data
+					FixupAlphaData( dlightdataHDR, numfaces_hdr, dfaces_hdr ); // hdr data
+
+					// show how much disk space we saved for swag, hell yeah!
+					Msg( "Lightmap alpha is present, stripped (%d bytes)\n", iOldLightDataSize - (dlightdataLDR.Count() + dlightdataHDR.Count()) );
+				}
+			}
+		}
+		else
+		{
+			g_LeafAmbientLightingLDR.Purge();
+			g_LeafAmbientIndexLDR.Purge();
+			g_LeafAmbientIndexHDR.Purge();
+			g_LeafAmbientLightingHDR.Purge();
+
+			for ( int i = 0; i < numfaces; i++ )
+			{
+				V_memset( dfaces[i].styles, 0, sizeof( dfaces[i].styles ) );
+				dfaces[i].lightofs = 0;
+			}
+			for ( int i = 0; i < numfaces_hdr; i++ )
+			{
+				V_memset( dfaces_hdr[i].styles, 0, sizeof( dfaces_hdr[i].styles ) );
+				dfaces_hdr[i].lightofs = 0;
+			}
+
+			dlightdataLDR.Purge();
+			dlightdataHDR.Purge();
+		}
 	}
-	*/
 		
 	// Load PAK file lump into appropriate data structure
 	byte *pakbuffer = NULL;
@@ -2311,6 +2975,29 @@ void LoadBSPFile( const char *filename )
 	{
 		GetPakFile()->ActivateByteSwapping( IsX360() );
 		GetPakFile()->ParseFromBuffer( pakbuffer, paksize );
+
+		if ( g_BSPConverterOptions.m_bEnabled && !g_BSPConverterOptions.m_bSaveLightData )
+		{
+			// strip static prop light data if we don't save light data
+			Msg( "stripping static prop light data\n" );
+
+			int iID = -1;
+			while ( 1 )
+			{
+				int iFileSize;
+				char szRelativeFileName[MAX_PATH];
+				iID = GetNextFilename( GetPakFile(), iID, szRelativeFileName, sizeof( szRelativeFileName ), iFileSize );
+				if ( iID == -1 )
+					break;
+
+				const char* pszExtension = V_GetFileExtension( szRelativeFileName );
+				if ( pszExtension && !V_stricmp( pszExtension, "vhv" ) )
+				{
+					RemoveFileFromPak( GetPakFile(), szRelativeFileName );
+					iID = -1; // reset our iteration, otherwise the loop will skip a bunch of files
+				}
+			}
+		}
 	}
 	else
 	{
@@ -2375,7 +3062,7 @@ void UnloadBSPFile()
 	numedges = 0;
 	numbrushes = 0;
 	numbrushsides = 0;
-	numareas = 0;
+	dareas.Purge();
 	numareaportals = 0;
 
 	visdatasize = 0;
@@ -2416,7 +3103,8 @@ void UnloadBSPFile()
 	g_TexDataStringData.Purge();
 	g_TexDataStringTable.Purge();
 
-	g_nOverlayCount = 0;
+	g_Overlays.Purge();
+	g_OverlayFades.Purge();
 	g_nWaterOverlayCount = 0;
 
 	g_LevelFlags = 0;
@@ -2619,13 +3307,53 @@ static void AddLump( int lumpnum, CUtlVector<T> &data, int version )
 
 /*
 =============
+SanityCheckBSPFile
+
+Checks if data to be saved fits within the engine limits
+=============
+*/
+void SanityCheckBSPFile()
+{
+	if ( texinfo.Count() > MAX_MAP_TEXINFO )
+	{
+		Error( "Map has too many texinfos (has %d, can have at most %d)\n", texinfo.Count(), MAX_MAP_TEXINFO );
+		return;
+	}
+
+	// these are the only constants that appear to have changed...
+	if ( entities.Count() > MAX_MAP_ENTITIES )
+	{
+		Error( "Map has too many entities (has %d, can have at most %d)\n", entities.Count(), MAX_MAP_ENTITIES );
+		return;
+	}
+	if ( g_dispinfo.Count() > MAX_MAP_DISPINFO )
+	{
+		Error( "Map has too many dispinfos (has %d, can have at most %d)\n", g_dispinfo.Count(), MAX_MAP_DISPINFO );
+		return;
+	}
+	if ( dareas.Count() > MAX_MAP_AREAS )
+	{
+		Error( "Map has too many areas (has %d, can have at most %d)\n", dareas.Count(), MAX_MAP_AREAS );
+		return;
+	}
+	if ( g_Overlays.Count() > MAX_MAP_OVERLAYS )
+	{
+		Error( "Map has too many overlays (has %d, can have at most %d)\n", g_Overlays.Count(), MAX_MAP_OVERLAYS );
+		return;
+	}
+}
+
+/*
+=============
 WriteBSPFile
 
 Swaps the bsp file in place, so it should not be referenced again
 =============
 */
 void WriteBSPFile( const char *filename, char *pUnused )
-{		
+{
+	SanityCheckBSPFile();
+
 	if ( texinfo.Count() > MAX_MAP_TEXINFO )
 	{
 		Error( "Map has too many texinfos (has %d, can have at most %d)\n", texinfo.Count(), MAX_MAP_TEXINFO );
@@ -2677,7 +3405,7 @@ void WriteBSPFile( const char *filename, char *pUnused )
 	AddLump( LUMP_SURFEDGES, dsurfedges, numsurfedges );
 	AddLump( LUMP_EDGES, dedges, numedges );
 	AddLump( LUMP_MODELS, dmodels, nummodels );
-	AddLump( LUMP_AREAS, dareas, numareas );
+	AddLump( LUMP_AREAS, dareas );
 	AddLump( LUMP_AREAPORTALS, dareaportals, numareaportals );
 
 	AddLump( LUMP_LIGHTING, dlightdataLDR, LUMP_LIGHTING_VERSION );
@@ -2707,9 +3435,9 @@ void WriteBSPFile( const char *filename, char *pUnused )
 	AddLump( LUMP_CUBEMAPS, g_CubemapSamples, g_nCubemapSamples );
 	AddLump( LUMP_TEXDATA_STRING_DATA, g_TexDataStringData );
 	AddLump( LUMP_TEXDATA_STRING_TABLE, g_TexDataStringTable );
-	AddLump( LUMP_OVERLAYS, g_Overlays, g_nOverlayCount );
+	AddLump( LUMP_OVERLAYS, g_Overlays );
 	AddLump( LUMP_WATEROVERLAYS, g_WaterOverlays, g_nWaterOverlayCount );
-	AddLump( LUMP_OVERLAY_FADES, g_OverlayFades, g_nOverlayCount );
+	AddLump( LUMP_OVERLAY_FADES, g_OverlayFades );
 
 	if ( g_pPhysCollide )
 	{
@@ -2725,6 +3453,12 @@ void WriteBSPFile( const char *filename, char *pUnused )
 	AddLump( LUMP_VERTNORMALINDICES, g_vertnormalindices, g_numvertnormalindices );
 
 	AddLump( LUMP_LEAFMINDISTTOWATER, g_LeafMinDistToWater, numleafs );
+
+	if ( g_BSPConverterOptions.m_bEnabled )
+	{
+		char pszFootprint[64] = "BSP21 converted to BSP20 using bspconverter";
+		AddLump( LUMP_UNUSED0, pszFootprint, 64 );
+	}
 
 	AddGameLumps();
 
@@ -2871,7 +3605,7 @@ void PrintBSPFileSizes (void)
 {
 	int	totalmemory = 0;
 
-//	if (!num_entities)
+//	if (!entities.Count())
 //		ParseEntities ();
 
 	Msg("\n");
@@ -2898,7 +3632,7 @@ void PrintBSPFileSizes (void)
 	totalmemory += ArrayUsage( "leaves",		numleafs,		ENTRIES(dleafs),		ENTRYSIZE(dleafs) );
 	totalmemory += ArrayUsage( "leaffaces",		numleaffaces,	ENTRIES(dleaffaces),	ENTRYSIZE(dleaffaces) );
 	totalmemory += ArrayUsage( "leafbrushes",	numleafbrushes,	ENTRIES(dleafbrushes),	ENTRYSIZE(dleafbrushes) );
-	totalmemory += ArrayUsage( "areas",	numareas,	ENTRIES(dareas),	ENTRYSIZE(dareas) );
+	totalmemory += ArrayUsage( "areas",         dareas.Count(), MAX_MAP_AREAS,          sizeof( darea_t ) );
 	totalmemory += ArrayUsage( "surfedges",		numsurfedges,	ENTRIES(dsurfedges),	ENTRYSIZE(dsurfedges) );
 	totalmemory += ArrayUsage( "edges",			numedges,		ENTRIES(dedges),		ENTRYSIZE(dedges) );
 	totalmemory += ArrayUsage( "LDR worldlights",	numworldlightsLDR,	ENTRIES(dworldlightsLDR),	ENTRYSIZE(dworldlightsLDR) );
@@ -2909,7 +3643,7 @@ void PrintBSPFileSizes (void)
 	totalmemory += ArrayUsage( "waterverts",	g_numprimverts,	ENTRIES(g_primverts),	ENTRYSIZE(g_primverts) );
 	totalmemory += ArrayUsage( "waterindices",	g_numprimindices,ENTRIES(g_primindices),ENTRYSIZE(g_primindices) );
 	totalmemory += ArrayUsage( "cubemapsamples", g_nCubemapSamples,ENTRIES(g_CubemapSamples),ENTRYSIZE(g_CubemapSamples) );
-	totalmemory += ArrayUsage( "overlays",      g_nOverlayCount, ENTRIES(g_Overlays),   ENTRYSIZE(g_Overlays) );
+	totalmemory += ArrayUsage( "overlays",      g_Overlays.Count(), MAX_MAP_OVERLAYS, sizeof( doverlay_t ) );
 	
 	totalmemory += GlobUsage( "LDR lightdata",		dlightdataLDR.Count(),	0 );
 	totalmemory += GlobUsage( "HDR lightdata",	dlightdataHDR.Count(),	0 );
@@ -2975,8 +3709,7 @@ void PrintBSPPackDirectory( void )
 
 //============================================
 
-int			num_entities;
-entity_t	entities[MAX_MAP_ENTITIES];
+CUtlVector<entity_t> entities;
 
 void StripTrailing (char *e)
 {
@@ -3035,11 +3768,10 @@ qboolean	ParseEntity (void)
 	if (Q_stricmp (token, "{") )
 		Error ("ParseEntity: { not found");
 	
-	if (num_entities == MAX_MAP_ENTITIES)
+	if ( entities.Count() == MAX_MAP_ENTITIES )
 		Error ("num_entities == MAX_MAP_ENTITIES");
 
-	mapent = &entities[num_entities];
-	num_entities++;
+	mapent = &entities[entities.AddToTail()];
 
 	do
 	{
@@ -3064,7 +3796,8 @@ Parses the dentdata string into entities
 */
 void ParseEntities (void)
 {
-	num_entities = 0;
+	entities.Purge();
+	entities.EnsureCapacity( MAX_MAP_ENTITIES );
 	ParseFromMemory (dentdata.Base(), dentdata.Count());
 
 	while (ParseEntity ())
@@ -3090,7 +3823,7 @@ void UnparseEntities (void)
 	CUtlBuffer buffer( 0, 0, CUtlBuffer::TEXT_BUFFER );
 	buffer.EnsureCapacity( 256 * 1024 );
 	
-	for (i=0 ; i<num_entities ; i++)
+	for (i=0 ; i<entities.Count() ; i++)
 	{
 		ep = entities[i].epairs;
 		if (!ep)
